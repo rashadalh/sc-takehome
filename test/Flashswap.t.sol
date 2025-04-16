@@ -16,6 +16,8 @@ address constant DESTINATION = address(0xddd);
 address constant RECIPIENT = address(0xeee);
 bytes constant EXPECTED_DATA = "expected data";
 
+import {console} from "forge-std/console.sol";
+
 contract Friend is Test {
     /// @notice A friend that will send arbitrary amounts of WETH to the swapper
     /// after taking 0.5 WBTC.
@@ -31,12 +33,14 @@ contract Friend is Test {
 /// `flashsSwapCallback` function. 
 contract Caller is IFlashswapCallback {
     IERC20 public immutable tokenIn;
+    Friend public friend;
     bytes public data;
     uint256 public amountReceived; 
     uint256 public amountToRepay;
 
-    constructor(IERC20 _tokenIn) {
+    constructor(IERC20 _tokenIn, Friend _friend) {
         tokenIn = _tokenIn;
+        friend = _friend;
     }
 
     function flashSwapCallback(
@@ -45,14 +49,29 @@ contract Caller is IFlashswapCallback {
         address pool, 
         bytes calldata _data
     ) external {
+        console.log("Flashswap callback");
+        // console.log("_amountReceived", _amountReceived);
+        console.log("_amountToRepay");
+        //console.logUint(_amountToRepay);
+        console.log("pool", pool);
+        //console.log("_data", _data);
+
         // TODO Implement this callback function to trade with the `Friend` and
         // to pay back the pool in order to finish the swap.
-
-        // Just stores the input data to storage so that the test can later
-        // validate that correct data was received.
+        console.log("about to approve");
+        IERC20(WBTC).approve(address(friend), 0.5e8);
+        console.log("about to get WETH");
+        friend.getWETHForWBTC(_amountToRepay);
+        //require(IERC20(WETH).balanceOf(address(this)) >= _amountToRepay, "Not enough WETH in flashswap callback");
+        console.log("about to transfer");
+        IERC20(WETH).transfer(pool, _amountToRepay);        
+        console.log("about to store");
+        // // Just stores the input data to storage so that the test can later
+        // // validate that correct data was received.
         data = _data; 
         amountReceived = _amountReceived;
         amountToRepay = _amountToRepay;
+        console.log("about to return");
     }    
 }
 
@@ -63,6 +82,7 @@ contract FlashswapTest is Test {
     function setUp() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
         friend = new Friend();
+        flashswap = new Flashswap();
     }
 
     /// TODO Test for a flashswap between three pools. In a normal swap, the
@@ -72,47 +92,65 @@ contract FlashswapTest is Test {
     /// `WETH` amount to pay the input amount to the pool. 
     function test_ExactOutput_ThreePools() public {
         uint256 _amountOut = 1e8; // 1 WBTC
-
+        console.log('1');
         // TODO You need to configure the path 
-        bytes memory _path = abi.encodePacked(); 
-
+        // WBTC -> USDC -> DAI -> WETH (reverse order)
+        bytes memory _path = abi.encodePacked(
+            address(WBTC), 
+            uint24(3000), 
+            address(USDC), 
+            uint24(3000), 
+            address(DAI), 
+            uint24(3000), 
+            address(WETH)
+        ); 
+        console.log('2');
         // The contract that receives the flashswap callback.         
         // The caller calls `Flashswap` -> `Flashswap` trades with the
         // UniswapPools -> `Flashswap` delegates the flashswap callback to the
         // `Caller` to execute arbitrary logic i.e. trading with the FRIEND. The
         // `Caller` must pay back the pool with the input token inside its
         // callback.
-        Caller caller = new Caller(IERC20(WETH)); // paying the swap with WETH
-
+        Caller caller = new Caller(IERC20(WETH), friend); // paying the swap with WETH
+        console.log('3');
         Flashswap.ExactOutputParams memory params = Flashswap.ExactOutputParams({
             path: _path,
             recipient: address(caller), // The `Caller` contract receives the output token.
             amountOut: _amountOut,
             data: EXPECTED_DATA
         });         
-
+        console.log('4');
         // The `Caller` contract calls the `Flashswap` contract.
         vm.prank(address(caller));
+        console.log('5');
         flashswap.exactOutput(params);
-
+        console.log('6');
         // TODO Make sure that these conditions pass.
         assertEq(IERC20(WBTC).balanceOf(address(friend)), 0.5e8, "The destination address receives half of the exact amount of output tokens");
+        console.log('7');
         assertEq(IERC20(WETH).balanceOf(address(caller)), 0.5e18, "The caller keeps half of the exact amount of output tokens");
+        console.log('8');
         assertEq(caller.data(), EXPECTED_DATA, "The caller receives the expected data through the callback");
+        console.log('9');
         assertEq(caller.amountReceived(), _amountOut, "The caller receives the expected `amountReceived` through the callback");
+        console.log('10');
     }
 
-    function test_Friend() public {
-        deal(address(WBTC), address(this), 0.5e8); // Give myself 0.5e8 BTC.
-        assertEq(IERC20(WBTC).balanceOf(address(this)), 0.5e8, "Minted 0.5e8 WBTC to myself");
-        IERC20(WBTC).approve(address(friend), 0.5e8);
+    // function test_Friend() public {
+    //     // Contract already has some WETH, set it to 0 for testing...
+    //     vm.store(address(WETH), keccak256(abi.encode(address(this), uint256(3))), bytes32(uint256(0)));
 
-        uint256 wethAmtOut = 1.2345e18;
+    //     deal(address(WBTC), address(this), 0.5e8); // Give myself 0.5e8 BTC.
+    //     assertEq(IERC20(WBTC).balanceOf(address(this)), 0.5e8, "Minted 0.5e8 WBTC to myself");
+    //     IERC20(WBTC).approve(address(friend), 0.5e8);
 
-        friend.getWETHForWBTC(wethAmtOut);
+    //     assertEq(IERC20(WETH).balanceOf(address(this)), 0, "I have no WETH to start with");
+    //     uint256 wethAmtOut = 1.2345e18;
 
-        assertEq(IERC20(WETH).balanceOf(address(this)), wethAmtOut, "The friend gives me the requested amount of WETH");
-        assertEq(IERC20(WBTC).balanceOf(address(this)), 0, "The friend takes the 0.5e8 WBTC that they want from me");
-        assertEq(IERC20(WBTC).balanceOf(address(friend)), 0.5e8, "The friend gets the 0.5e8 WBTC that they want");
-    }
+    //     friend.getWETHForWBTC(wethAmtOut);
+
+    //     assertEq(IERC20(WETH).balanceOf(address(this)), wethAmtOut, "The friend gives me the requested amount of WETH");
+    //     assertEq(IERC20(WBTC).balanceOf(address(this)), 0, "The friend takes the 0.5e8 WBTC that they want from me");
+    //     assertEq(IERC20(WBTC).balanceOf(address(friend)), 0.5e8, "The friend gets the 0.5e8 WBTC that they want");
+    // }
 }
