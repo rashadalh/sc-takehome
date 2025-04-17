@@ -10,14 +10,15 @@ import {IFlashswapCallback} from "./interfaces/IFlashswapCallback.sol";
 /// @title Flashswap
 /// @notice Enables a "multi-hop flashswap" using Uniswap.
 contract Flashswap is IUniswapV3SwapCallback {
-    address internal constant FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
-    
+    address internal constant FACTORY =
+        0x1F98431c8aD98523631AE4a59f267346ea31F984;
+
     /// @dev Transient storage variable used for returning the computed amount in for an exact output swap.
     uint256 private amountInCached = 0;
 
     struct ExactOutputParams {
         bytes path; // Uniswap multi-hop swap path
-        address recipient; 
+        address recipient;
         uint256 amountOut;
         bytes data; // Data passed to the caller's own callback control flow
     }
@@ -61,21 +62,22 @@ contract Flashswap is IUniswapV3SwapCallback {
     ) external override {
         require(amount0Delta > 0 || amount1Delta > 0); // swaps entirely within 0-liquidity regions are not supported
         SwapCallbackData memory data = abi.decode(_data, (SwapCallbackData));
-        (address tokenIn, address tokenOut, uint24 fee) = Path.decodeFirstPool(data.path);
+        (address tokenIn, address tokenOut, uint24 fee) = Path.decodeFirstPool(
+            data.path
+        );
         CallbackValidation.verifyCallback(FACTORY, tokenIn, tokenOut, fee);
 
-        (bool isExactInput, uint256 amountToPay) =
-            amount0Delta > 0
-                ? (tokenIn < tokenOut, uint256(amount0Delta))
-                : (tokenOut < tokenIn, uint256(amount1Delta));
+        (bool isExactInput, uint256 amountToPay) = amount0Delta > 0
+            ? (tokenIn < tokenOut, uint256(amount0Delta))
+            : (tokenOut < tokenIn, uint256(amount1Delta));
         if (isExactInput) {
             // "isExactInput");
             pay(tokenIn, data.payer, msg.sender, amountToPay);
         } else {
             // either initiate the next swap or pay
-            
-assert(tokenIn != address(0) && tokenOut != address(0));
-if (Path.hasMultiplePools(data.path)) {
+
+            assert(tokenIn != address(0) && tokenOut != address(0));
+            if (Path.hasMultiplePools(data.path)) {
                 bytes memory newPath = Path.skipToken(data.path);
 
                 // Create a new SwapCallbackData that preserves the original userData
@@ -86,7 +88,6 @@ if (Path.hasMultiplePools(data.path)) {
                     amountOut: data.amountOut
                 });
                 exactOutputInternal(amountToPay, msg.sender, 0, newData);
-
             } else {
                 amountInCached = amountToPay;
                 tokenIn = tokenOut; // swap in/out because exact output swaps are reversed
@@ -100,7 +101,6 @@ if (Path.hasMultiplePools(data.path)) {
                     msg.sender,
                     data.userData
                 );
-
             }
         }
     }
@@ -115,30 +115,43 @@ if (Path.hasMultiplePools(data.path)) {
         // allow swapping to the router address with address 0
         if (recipient == address(0)) recipient = address(this);
 
-        (address tokenOut, address tokenIn, uint24 fee) = Path.decodeFirstPool(data.path);
+        (address tokenOut, address tokenIn, uint24 fee) = Path.decodeFirstPool(
+            data.path
+        );
 
-assert(tokenIn != address(0) && tokenOut != address(0));
+        assert(tokenIn != address(0) && tokenOut != address(0));
 
         bool zeroForOne = tokenIn < tokenOut;
 
-(int256 amount0Delta, int256 amount1Delta) =
-    _getPool(tokenIn, tokenOut, fee).swap(
-        recipient,
-        zeroForOne,
-        -int256(amountOut),
-        sqrtPriceLimitX96 == 0
-            ? (zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1)
-            : sqrtPriceLimitX96,
-        abi.encode(data)
-    );
+        (int256 amount0Delta, int256 amount1Delta) = _getPool(
+            tokenIn,
+            tokenOut,
+            fee
+        ).swap(
+                recipient,
+                zeroForOne,
+                -int256(amountOut),
+                sqrtPriceLimitX96 == 0
+                    ? (
+                        zeroForOne
+                            ? TickMath.MIN_SQRT_RATIO + 1
+                            : TickMath.MAX_SQRT_RATIO - 1
+                    )
+                    : sqrtPriceLimitX96,
+                abi.encode(data)
+            );
 
         uint256 amountOutReceived;
-(amountIn, amountOutReceived) = zeroForOne
-    ? (uint256(amount0Delta), uint256(-amount1Delta))
-    : (uint256(amount1Delta), uint256(-amount0Delta));
+        (amountIn, amountOutReceived) = zeroForOne
+            ? (uint256(amount0Delta), uint256(-amount1Delta))
+            : (uint256(amount1Delta), uint256(-amount0Delta));
 
-assert(amountOutReceived <= amountOut + 1e6 && amountOutReceived >= amountOut - 1e6); // Allow for minor rounding, can adjust
-if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut, "Not enough output");
+        assert(
+            amountOutReceived <= amountOut + 1e6 &&
+                amountOutReceived >= amountOut - 1e6
+        ); // Allow for minor rounding, can adjust
+        if (sqrtPriceLimitX96 == 0)
+            require(amountOutReceived == amountOut, "Not enough output");
     }
 
     /// TODO Implement this function.
@@ -152,7 +165,12 @@ if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut, "Not enough 
             params.amountOut,
             params.recipient,
             0,
-            SwapCallbackData({path: params.path, payer: msg.sender, userData: abi.encode(msg.sender), amountOut: params.amountOut})
+            SwapCallbackData({
+                path: params.path,
+                payer: msg.sender,
+                userData: abi.encode(msg.sender),
+                amountOut: params.amountOut
+            })
         );
     }
 
@@ -163,7 +181,17 @@ if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut, "Not enough 
     function exactInput(ExactInputParams calldata params) external {}
 
     /// @dev Returns the pool for the given token pair and fee. The pool contract may or may not exist.
-    function _getPool(address tokenA, address tokenB, uint24 fee) private pure returns (IUniswapV3Pool) {
-        return IUniswapV3Pool(PoolAddress.computeAddress(FACTORY, PoolAddress.getPoolKey(tokenA, tokenB, fee)));
+    function _getPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) private pure returns (IUniswapV3Pool) {
+        return
+            IUniswapV3Pool(
+                PoolAddress.computeAddress(
+                    FACTORY,
+                    PoolAddress.getPoolKey(tokenA, tokenB, fee)
+                )
+            );
     }
 }
