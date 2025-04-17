@@ -109,7 +109,7 @@ contract Flashswap is IUniswapV3SwapCallback {
                 // Get it from the data.path by decoding the first pool's tokenIn
                 console.log("tokenOut:", tokenOut);
                 
-                uint256 amountR;
+                uint256 amountReceived;
                 if (amount0Delta < 0) {
                     amountReceived = uint256(-amount0Delta);
                 } else {
@@ -121,7 +121,7 @@ contract Flashswap is IUniswapV3SwapCallback {
                 console.log(callerAddr);
 
                 IFlashswapCallback(callerAddr).flashSwapCallback(
-                    amountR,
+                    amountReceived,
                     amountToPay,
                     msg.sender,
                     data.userData
