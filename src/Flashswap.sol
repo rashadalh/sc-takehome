@@ -76,7 +76,9 @@ contract Flashswap is IUniswapV3SwapCallback {
             pay(tokenIn, data.payer, msg.sender, amountToPay);
         } else {
             // either initiate the next swap or pay
-            if (Path.hasMultiplePools(data.path)) {
+            
+assert(tokenIn != address(0) && tokenOut != address(0));
+if (Path.hasMultiplePools(data.path)) {
                 bytes memory newPath = Path.skipToken(data.path);
                 console.log("hasMultiplePools");
                 console.log("about to initiate next swap");
@@ -92,22 +94,9 @@ contract Flashswap is IUniswapV3SwapCallback {
             } else {
                 amountInCached = amountToPay;
                 tokenIn = tokenOut; // swap in/out because exact output swaps are reversed
-                //pay(tokenIn, data.payer, msg.sender, amountToPay);
 
-                // Simple logging
-                console.log("--- Final Callback ---");
-                console.log("amount0Delta value:");
-                //console.logInt(amount0Delta);
-                console.log("amount1Delta value:");
-                //console.logInt(amount1Delta);
-                
-                // Check if we're at the first hop of the reverse path (WBTC-USDC pool)
-                // We only want to trigger the flashSwapCallback for the first pool in the reverse path
-                // which is the one that gives us WBTC (the desired output token)
-                
-                // The first token in the path is the desired output token (in exactOutput swaps)
-                // Get it from the data.path by decoding the first pool's tokenIn
-                console.log("tokenOut:", tokenOut);
+                console.log("[DEBUG] data.userData before callback:");
+                console.logBytes(data.userData);
                 
                 uint256 amountReceived;
                 if (amount0Delta < 0) {
@@ -117,8 +106,6 @@ contract Flashswap is IUniswapV3SwapCallback {
                 }
 
                 address callerAddr = abi.decode(data.userData, (address));
-                console.log("-- callerAddr --");
-                console.log(callerAddr);
 
                 IFlashswapCallback(callerAddr).flashSwapCallback(
                     amountReceived,
@@ -126,8 +113,7 @@ contract Flashswap is IUniswapV3SwapCallback {
                     msg.sender,
                     data.userData
                 );
-                console.log("flashSwapCallback completed");
-                
+
             }
         }
     }
@@ -144,28 +130,60 @@ contract Flashswap is IUniswapV3SwapCallback {
 
         (address tokenOut, address tokenIn, uint24 fee) = Path.decodeFirstPool(data.path);
 
+assert(tokenIn != address(0) && tokenOut != address(0));
+
         bool zeroForOne = tokenIn < tokenOut;
 
-        (int256 amount0Delta, int256 amount1Delta) =
-            _getPool(tokenIn, tokenOut, fee).swap(
-                recipient,
-                zeroForOne,
-                -int256(amountOut),
-                sqrtPriceLimitX96 == 0
-                    ? (zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1)
-                    : sqrtPriceLimitX96,
-                abi.encode(data)
-            );
+(int256 amount0Delta, int256 amount1Delta) =
+    _getPool(tokenIn, tokenOut, fee).swap(
+        recipient,
+        zeroForOne,
+        -int256(amountOut),
+        sqrtPriceLimitX96 == 0
+            ? (zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1)
+            : sqrtPriceLimitX96,
+        abi.encode(data)
+    );
+// Special log for DAI <> USDC failing hop
+if (
+    (tokenIn == 0x6B175474E89094C44Da98b954EedeAC495271d0F && tokenOut == 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) ||
+    (tokenIn == 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 && tokenOut == 0x6B175474E89094C44Da98b954EedeAC495271d0F)
+) {
+    console.log("[DEBUG] ---- DAI <> USDC HOP ----");
+    console.log("[DEBUG] tokenIn:", tokenIn);
+    console.log("[DEBUG] tokenOut:", tokenOut);
+    console.log("[DEBUG] zeroForOne:", zeroForOne);
+    console.log("[DEBUG] amountOut:", amountOut);
+    console.log("[DEBUG] amount0Delta:", amount0Delta);
+    console.log("[DEBUG] amount1Delta:", amount1Delta);
+    console.log("[DEBUG] pool address:", address(_getPool(tokenIn, tokenOut, fee)));
+    console.log("[DEBUG] path:");
+    console.logBytes(data.path);
+}
+// Special log for DAI <> USDC failing hop
+if (
+    (tokenIn == 0x6B175474E89094C44Da98b954EedeAC495271d0F && tokenOut == 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48) ||
+    (tokenIn == 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 && tokenOut == 0x6B175474E89094C44Da98b954EedeAC495271d0F)
+) {
+    console.log("[DEBUG] ---- DAI <> USDC HOP ----");
+    console.log("[DEBUG] tokenIn:", tokenIn);
+    console.log("[DEBUG] tokenOut:", tokenOut);
+    console.log("[DEBUG] zeroForOne:", zeroForOne);
+    console.log("[DEBUG] amountOut:", amountOut);
+    console.log("[DEBUG] amount0Delta:", amount0Delta);
+    console.log("[DEBUG] amount1Delta:", amount1Delta);
+    console.log("[DEBUG] pool address:", address(_getPool(tokenIn, tokenOut, fee)));
+    console.log("[DEBUG] path:");
+    console.logBytes(data.path);
+}
 
         uint256 amountOutReceived;
-        (amountIn, amountOutReceived) = zeroForOne
-            ? (uint256(amount0Delta), uint256(-amount1Delta))
-            : (uint256(amount1Delta), uint256(-amount0Delta));
-        // it's technically possible to not receive the full output amount,
-        // so if no price limit has been specified, require this possibility away
-        console.logUint(amountOutReceived);
-        console.logUint(amountOut);
-        if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut, "Not enough output");
+(amountIn, amountOutReceived) = zeroForOne
+    ? (uint256(amount0Delta), uint256(-amount1Delta))
+    : (uint256(amount1Delta), uint256(-amount0Delta));
+
+assert(amountOutReceived <= amountOut + 1e6 && amountOutReceived >= amountOut - 1e6); // Allow for minor rounding, can adjust
+if (sqrtPriceLimitX96 == 0) require(amountOutReceived == amountOut, "Not enough output");
     }
 
     /// TODO Implement this function.

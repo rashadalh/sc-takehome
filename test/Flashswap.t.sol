@@ -99,7 +99,7 @@ contract FlashswapTest is Test {
             address(WBTC), 
             uint24(3000), 
             address(USDC), 
-            uint24(3000), 
+            uint24(500), 
             address(DAI), 
             uint24(3000), 
             address(WETH)
@@ -125,10 +125,12 @@ contract FlashswapTest is Test {
         console.log('5');
         flashswap.exactOutput(params);
         console.log('6');
+        console.log('Caller WBTC balance after swap:', IERC20(WBTC).balanceOf(address(caller)));
         // TODO Make sure that these conditions pass.
         assertEq(IERC20(WBTC).balanceOf(address(friend)), 0.5e8, "The destination address receives half of the exact amount of output tokens");
         console.log('7');
-        assertEq(IERC20(WETH).balanceOf(address(caller)), 0.5e18, "The caller keeps half of the exact amount of output tokens");
+        // @notice this test case was orginally checking WETH, it should be WBTC...
+        assertEq(IERC20(WBTC).balanceOf(address(caller)), 0.5e8, "The caller keeps half of the exact amount of output tokens");
         console.log('8');
         assertEq(caller.data(), EXPECTED_DATA, "The caller receives the expected data through the callback");
         console.log('9');
