@@ -1,6 +1,3 @@
-## Ion Takehome
-- Because takehomes are not paid for hours worked, this task is designed to help us gauge the participants’ skills and understanding, rather than to produce work that will be used by the team.
-- To respect the participant’s work, we will not be taking this work or modifying it for the team’s interest in any way.
 ## Problem
 
 **Here's the scenario:**
@@ -51,14 +48,6 @@
 - Uniswap swap paths can be [encoded in bytes and decoded](https://uniswapv3book.com/milestone_4/path.html?highlight=path#swap-path) using the [`Path.sol` library](https://github.com/Uniswap/v3-periphery/blob/697c2474757ea89fec12a4e6db16a574fe259610/contracts/libraries/Path.sol). 
 - Example of using the `path` is also in `SwapRouter.sol`. 
 3. You may need to review other resources related to UniV3 if not yet familiar.
-
-## Note
-1. Recommendations
-- Start by diagramming out the flow for callback control flow to ensure understanding of the requirements. 
-2. NOTE
-- If the task is challenging, please do not hestitate to reach out with any questions if there are blockers. 
-    - We would ***much rather have open discussions around the problem to work it out together as part of the takehome process*** than to have the participant be discouraged and not complete the task. We are looking for a glimpse into your thought process as you tacke non-trivial problems. 
-- You are also encouraged to reference any resources or tools online if it helps your process.
 
 ## Usage
 
